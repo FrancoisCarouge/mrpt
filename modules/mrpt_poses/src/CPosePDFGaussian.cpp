@@ -501,9 +501,9 @@ void CPosePDFGaussian::inverseComposition(
   //     being A = dh_dx0 * COV01 * dh_dx1^t
   this->cov = mrpt::math::multiply_HCHt(dh_x0, x0.cov) + mrpt::math::multiply_HCHt(dh_x1, x1.cov);
 
-  auto M = CMatrixDouble33(dh_x0.asEigen() * COV_01.asEigen() * dh_x1.asEigen());
+  const auto A = CMatrixDouble33(dh_x0.asEigen() * COV_01.asEigen() * dh_x1.asEigen().transpose());
 
-  this->cov.asEigen() += (M.asEigen() * M.transpose()).eval();
+  this->cov.asEigen() += (A.asEigen() + A.asEigen().transpose()).eval();
 
   // mean
   mean = x1.mean - x0.mean;
