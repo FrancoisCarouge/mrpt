@@ -300,8 +300,10 @@ void CRangeBearingKFSLAM::OnTransitionModel(
     out_skipPrediction = true;
   }
 
-  // Current pose: copy xyz+quat
-  CPose3DQuat robotPose = getCurrentRobotPoseMean();
+  // Current pose: copy xyz+quat from the given state, which numeric Jacobians
+  // perturb (not the filter's mean)
+  CPose3DQuat robotPose(mrpt::math::UNINITIALIZED_QUATERNION);
+  for (size_t i = 0; i < 7; i++) robotPose[i] = xv[i];
 
   // Increment pose: copy xyz+quat (explicitly unroll the loop)
   CPose3DQuat odoIncrement(UNINITIALIZED_QUATERNION);

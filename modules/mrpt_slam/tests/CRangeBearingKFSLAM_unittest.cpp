@@ -331,6 +331,19 @@ TEST(CRangeBearingKFSLAM, mapsFourLandmarksWithKnownIDs)
   EXPECT_EQ(lmPos.size(), 0U);
 }
 
+// The analytic Jacobians agree with numeric ones: the transition model must
+// predict from the state it is given, which the numeric Jacobians perturb.
+TEST(CRangeBearingKFSLAM, analyticJacobiansMatchNumericOnes)
+{
+  mrpt::random::getRandomGenerator().randomize(1234);
+
+  const auto lms = makeLandmarks();
+
+  CRangeBearingKFSLAM f;
+  f.KF_options.debug_verify_analytic_jacobians = true;
+  EXPECT_NO_THROW(runSession(f, lms));
+}
+
 TEST(CRangeBearingKFSLAM, worksWithoutOdometry)
 {
   mrpt::random::getRandomGenerator().randomize(55);
