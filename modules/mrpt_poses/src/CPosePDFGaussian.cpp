@@ -576,8 +576,8 @@ void CPosePDFGaussian::composePoint(const mrpt::math::TPoint2D& l, CPoint2DPDFGa
   // COV:
   CMatrixDouble33 df_dx(UNINITIALIZED_MATRIX), df_du(UNINITIALIZED_MATRIX);
   CPosePDF::jacobiansPoseComposition(
-      this->mean,  // x
-      this->mean,  // u
+      this->mean,              // x
+      CPose2D(l.x, l.y, 0.0),  // u: the point, as a pose
       df_dx, df_du,
       true,  // Eval df_dx
       false  // Eval df_du (not needed)
