@@ -136,5 +136,15 @@ void CPose3DQuatPDF::jacobiansPoseComposition(
         (norm_jacob * CMatrixFixed<double, 4, 4>(aux44_data)).asEigen();
   }
 
+  // The composition normalizes its quaternion to a positive real part: when the
+  // product of the quaternions has a negative real part, the result is the
+  // negated normalized product, and so are the Jacobians of its quaternion.
+  const double product_r = qr * q2r - qx * q2x - qy * q2y - qz * q2z;
+  if (product_r < 0)
+  {
+    df_dx.block<4, 7>(3, 0) *= -1;
+    df_du.block<4, 7>(3, 0) *= -1;
+  }
+
   if (out_x_oplus_u) *out_x_oplus_u = x_plus_u;
 }
