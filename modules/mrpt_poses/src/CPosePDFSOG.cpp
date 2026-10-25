@@ -413,9 +413,16 @@ void CPosePDFSOG::inverse(CPosePDF& o) const
  ---------------------------------------------------------------*/
 void CPosePDFSOG::operator+=(const CPose2D& Ap)
 {
-  for (auto& m : m_modes) m.mean = m.mean + Ap;
-
-  this->rotateAllCovariances(Ap.phi());
+  // The covariance of each mode's mean (+) Ap, Ap being certain: J * COV * J^T,
+  // J the Jacobian of the composition with respect to its first pose.
+  for (auto& m : m_modes)
+  {
+    CMatrixDouble33 df_dx(UNINITIALIZED_MATRIX), df_du(UNINITIALIZED_MATRIX);
+    CPosePDF::jacobiansPoseComposition(m.mean, Ap, df_dx, df_du, true, false);
+    const CMatrixDouble33 OLD_COV = m.cov;
+    m.cov = mrpt::math::multiply_HCHt(df_dx, OLD_COV);
+    m.mean = m.mean + Ap;
+  }
 }
 
 /*---------------------------------------------------------------

@@ -284,9 +284,11 @@ void CPose3DPDFGaussianInf::operator+=(const CPose3D& Ap)
       Ap,          // u
       df_dx, df_du);
 
-  // this->cov = H1*this->cov*H1' + H2*Ap.cov*H2';
-  // cov_inv   = ... => The same than above!
-  cov_inv = mrpt::math::multiply_HCHt(df_dx, OLD_COV_INV);
+  // this->cov = H1*this->cov*H1' + H2*Ap.cov*H2', with Ap.cov = 0, so the
+  // information matrix becomes H1^-T * cov_inv * H1^-1
+  const Eigen::Matrix<double, 6, 6> df_dx_inv = df_dx.asEigen().inverse();
+  cov_inv = CMatrixDouble66(
+      Eigen::Matrix<double, 6, 6>(df_dx_inv.transpose() * OLD_COV_INV.asEigen() * df_dx_inv));
   // df_du: Nothing to do, since COV(Ap) = zeros
 
   // MEAN:

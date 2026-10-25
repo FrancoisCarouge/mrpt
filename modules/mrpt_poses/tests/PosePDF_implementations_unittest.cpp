@@ -36,6 +36,7 @@
 #include <mrpt/random.h>
 #include <mrpt/serialization/CArchive.h>
 
+#include <Eigen/Dense>
 #include <filesystem>
 
 using namespace mrpt;
@@ -103,6 +104,37 @@ TEST(CPose3DPDFGaussian, evaluateNormalizedPDF)
 }
 
 // --- CPose3DPDFGaussianInf ---
+
+// Composing the information form with a certain pose must give the inverse of
+// the composed covariance: the information matrix goes through the inverse
+// Jacobian, J^-T * INF * J^-1, not J * INF * J^T.
+TEST(CPose3DPDFGaussianInf, CompositionWithCertainPose)
+{
+  CMatrixDouble66 cov;
+  cov.setIdentity();
+  cov *= 0.01;
+  cov(0, 3) = cov(3, 0) = 0.002;
+  cov(1, 4) = cov(4, 1) = -0.001;
+  const CPose3D mean(1.0, -2.0, 0.5, 0.8, 0.2, -0.3);
+  const CPose3D Ap(3.0, 1.5, -1.0, -1.1, 0.1, 0.4);
+
+  CPose3DPDFGaussian expected(mean, cov);
+  expected += Ap;
+
+  CPose3DPDFGaussianInf inf;
+  inf.copyFrom(CPose3DPDFGaussian(mean, cov));
+  inf += Ap;
+  CMatrixDouble66 inf_cov;
+  inf.getCovariance(inf_cov);
+
+  for (int i = 0; i < 6; i++)
+  {
+    for (int j = 0; j < 6; j++)
+    {
+      EXPECT_NEAR(inf_cov(i, j), expected.cov(i, j), 1e-9) << "(" << i << ", " << j << ")";
+    }
+  }
+}
 
 TEST(CPose3DPDFGaussianInf, bayesianFusion)
 {
@@ -377,6 +409,135 @@ TEST(CPosePDFGaussian, ChangeCoordinatesReference)
   p2.changeCoordinatesReference(CPose3D(0, 0, 0, M_PI / 2, 0, 0));
   EXPECT_NEAR(p2.mean.x(), 0.0, 1e-6);
   EXPECT_NEAR(p2.mean.y(), 1.0, 1e-6);
+}
+
+// The covariance of x1 (-) x0, given the cross-covariance of x0 and x1, is the
+// linearization of the inverse composition over the joint distribution of (x1, x0).
+TEST(CPosePDFGaussian, InverseCompositionWithCrossCovariance)
+{
+  // a joint covariance of (x1, x0), positive definite with non-zero cross terms
+  Eigen::Matrix<double, 6, 6> L = Eigen::Matrix<double, 6, 6>::Zero();
+  for (int i = 0; i < 6; i++)
+  {
+    for (int j = 0; j <= i; j++)
+    {
+      L(i, j) = (i == j) ? 0.2 + 0.05 * i : 0.03 * (i - j) - 0.02;
+    }
+  }
+  const Eigen::Matrix<double, 6, 6> joint = L * L.transpose();
+  const CMatrixDouble33 C11(joint.block<3, 3>(0, 0));
+  const CMatrixDouble33 C00(joint.block<3, 3>(3, 3));
+  // COV_01, the covariance of x0 with x1
+  const CMatrixDouble33 C01(joint.block<3, 3>(3, 0));
+
+  const CPosePDFGaussian x1(CPose2D(2.0, -1.0, 0.7), C11);
+  const CPosePDFGaussian x0(CPose2D(0.5, 1.5, -0.4), C00);
+
+  CPosePDFGaussian result;
+  result.inverseComposition(x1, x0, C01);
+
+  // the Jacobians of x1 (-) x0 with respect to x1 and x0
+  const double c = std::cos(x0.mean.phi()), s = std::sin(x0.mean.phi());
+  const double dx = x1.mean.x() - x0.mean.x(), dy = x1.mean.y() - x0.mean.y();
+  Eigen::Matrix<double, 3, 6> J = Eigen::Matrix<double, 3, 6>::Zero();
+  J(0, 0) = c;
+  J(0, 1) = s;
+  J(1, 0) = -s;
+  J(1, 1) = c;
+  J(2, 2) = 1;
+  J(0, 3) = -c;
+  J(0, 4) = -s;
+  J(0, 5) = -dx * s + dy * c;
+  J(1, 3) = s;
+  J(1, 4) = -c;
+  J(1, 5) = -dx * c - dy * s;
+  J(2, 5) = -1;
+  const Eigen::Matrix3d expected = J * joint * J.transpose();
+
+  for (int i = 0; i < 3; i++)
+  {
+    for (int j = 0; j < 3; j++)
+    {
+      EXPECT_NEAR(result.cov(i, j), expected(i, j), 1e-12) << "(" << i << ", " << j << ")";
+    }
+  }
+}
+
+// A pose PDF composed with a certain point: the point's covariance is
+// J * COV * J^T, J the Jacobian of the composed point with respect to the pose.
+TEST(CPosePDFGaussian, ComposePoint)
+{
+  CMatrixDouble33 cov;
+  cov(0, 0) = 0.04;
+  cov(1, 1) = 0.09;
+  cov(2, 2) = 0.01;
+  cov(0, 1) = cov(1, 0) = 0.02;
+  cov(0, 2) = cov(2, 0) = -0.005;
+  cov(1, 2) = cov(2, 1) = 0.003;
+  const CPosePDFGaussian pdf(CPose2D(1.0, -2.0, 0.8), cov);
+  const mrpt::math::TPoint2D l(3.0, 1.5);
+
+  CPoint2DPDFGaussian g;
+  pdf.composePoint(l, g);
+
+  const double c = std::cos(0.8), s = std::sin(0.8);
+  Eigen::Matrix<double, 2, 3> J;
+  J << 1, 0, -s * l.x - c * l.y, 0, 1, c * l.x - s * l.y;
+  const Eigen::Matrix2d expected = J * cov.asEigen() * J.transpose();
+  for (int i = 0; i < 2; i++)
+  {
+    for (int j = 0; j < 2; j++)
+    {
+      EXPECT_NEAR(g.cov(i, j), expected(i, j), 1e-12) << "(" << i << ", " << j << ")";
+    }
+  }
+}
+
+// Composing with a certain pose is composing with a Gaussian of zero covariance:
+// the covariance goes through the Jacobian of the composition with respect to
+// the first pose, not a rotation by the second pose's heading.
+TEST(CPosePDFGaussian, CompositionWithCertainPose)
+{
+  CMatrixDouble33 cov;
+  cov(0, 0) = 0.04;
+  cov(1, 1) = 0.09;
+  cov(2, 2) = 0.01;
+  cov(0, 1) = cov(1, 0) = 0.02;
+  cov(0, 2) = cov(2, 0) = -0.005;
+  cov(1, 2) = cov(2, 1) = 0.003;
+  const CPose2D mean(1.0, -2.0, 0.8);
+  const CPose2D Ap(3.0, 1.5, -1.1);
+
+  CPosePDFGaussian expected(mean, cov);
+  expected += CPosePDFGaussian(Ap, CMatrixDouble33());
+
+  CPosePDFGaussian gauss(mean, cov);
+  gauss += Ap;
+
+  CPosePDFGaussianInf inf(CPosePDFGaussian(mean, cov));
+  inf += Ap;
+  CMatrixDouble33 inf_cov;
+  inf.getCovariance(inf_cov);
+
+  CPosePDFSOG sog;
+  sog.clear();
+  CPosePDFSOG::TGaussianMode mode;
+  mode.mean = mean;
+  mode.cov = cov;
+  sog.push_back(mode);
+  sog += Ap;
+
+  for (int i = 0; i < 3; i++)
+  {
+    for (int j = 0; j < 3; j++)
+    {
+      EXPECT_NEAR(gauss.cov(i, j), expected.cov(i, j), 1e-12) << "(" << i << ", " << j << ")";
+      EXPECT_NEAR(inf_cov(i, j), expected.cov(i, j), 1e-9) << "(" << i << ", " << j << ")";
+      EXPECT_NEAR(sog[0].cov(i, j), expected.cov(i, j), 1e-12) << "(" << i << ", " << j << ")";
+    }
+  }
+  EXPECT_NEAR(gauss.mean.x(), expected.mean.x(), 1e-12);
+  EXPECT_NEAR(gauss.mean.phi(), expected.mean.phi(), 1e-12);
 }
 
 TEST(CPosePDFGaussian, InverseCompositionAndOperators)

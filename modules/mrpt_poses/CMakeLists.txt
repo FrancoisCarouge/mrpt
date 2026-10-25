@@ -157,6 +157,18 @@ mrpt_add_library(
     Eigen3::Eigen
 )
 
+# The covariance propagation of the pose PDFs uses the header-only FrancoisCarouge
+# TypedLinearAlgebra library with mp-units, privately: C++26 for this module's sources only.
+set(MRPT_FCAROUGE_SOURCE_DIR "/home/dev/ws/px4/px4/src/lib/fcarouge" CACHE PATH
+  "Directory holding the TypedLinearAlgebra and mp-units checkouts")
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+  ${MRPT_FCAROUGE_SOURCE_DIR}/TypedLinearAlgebra/include
+  ${MRPT_FCAROUGE_SOURCE_DIR}/TypedLinearAlgebra/support/eigen
+  ${MRPT_FCAROUGE_SOURCE_DIR}/TypedLinearAlgebra/support/mp_units
+  ${MRPT_FCAROUGE_SOURCE_DIR}/mp-units/src/core/include
+  ${MRPT_FCAROUGE_SOURCE_DIR}/mp-units/src/systems/include)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_26)
+
 target_precompile_headers(${PROJECT_NAME} PRIVATE
     <vector>
     <string>

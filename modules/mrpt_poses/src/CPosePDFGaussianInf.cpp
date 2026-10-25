@@ -339,8 +339,15 @@ void CPosePDFGaussianInf::inverse(CPosePDF& o) const
  ---------------------------------------------------------------*/
 void CPosePDFGaussianInf::operator+=(const CPose2D& Ap)
 {
+  // The covariance of mean (+) Ap, Ap being certain, is J * COV * J^T, J the
+  // Jacobian of the composition with respect to its first pose: the
+  // information matrix becomes J^-T * INF * J^-1.
+  CMatrixDouble33 df_dx(UNINITIALIZED_MATRIX), df_du(UNINITIALIZED_MATRIX);
+  CPosePDF::jacobiansPoseComposition(mean, Ap, df_dx, df_du, true, false);
+  const Eigen::Matrix3d J_inv = df_dx.asEigen().inverse();
+  cov_inv = CMatrixDouble33(Eigen::Matrix3d(J_inv.transpose() * cov_inv.asEigen() * J_inv));
+
   mean = mean + Ap;
-  rotateCov(Ap.phi());
 }
 
 /*---------------------------------------------------------------
