@@ -448,6 +448,12 @@ TEST_F(Pose3DQuatPDFGaussTests, CompositionJacobian)
       1, 2, 3, 20.0_deg, 80.0_deg, 70.0_deg, -8, 45, 10, 50.0_deg, 10.0_deg, 30.0_deg);
   testCompositionJacobian(
       1, 2, 3, 20.0_deg, 80.0_deg, 70.0_deg, -8, 45, 10, 50.0_deg, -10.0_deg, -30.0_deg);
+  // compositions whose quaternion product has a negative real part, which the
+  // composition negates
+  testCompositionJacobian(
+      1, 2, 3, 150.0_deg, 0.0_deg, 0.0_deg, -8, 45, 10, 120.0_deg, 0.0_deg, 0.0_deg);
+  testCompositionJacobian(
+      1, 2, 3, 170.0_deg, 30.0_deg, -60.0_deg, -8, 45, 10, 140.0_deg, -20.0_deg, 100.0_deg);
 }
 
 TEST_F(Pose3DQuatPDFGaussTests, Inverse)
