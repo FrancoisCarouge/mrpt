@@ -432,6 +432,53 @@ TEST(CPosePDFGaussian, InverseCompositionWithCrossCovariance)
   }
 }
 
+// Composing with a certain pose is composing with a Gaussian of zero covariance:
+// the covariance goes through the Jacobian of the composition with respect to
+// the first pose, not a rotation by the second pose's heading.
+TEST(CPosePDFGaussian, CompositionWithCertainPose)
+{
+  CMatrixDouble33 cov;
+  cov(0, 0) = 0.04;
+  cov(1, 1) = 0.09;
+  cov(2, 2) = 0.01;
+  cov(0, 1) = cov(1, 0) = 0.02;
+  cov(0, 2) = cov(2, 0) = -0.005;
+  cov(1, 2) = cov(2, 1) = 0.003;
+  const CPose2D mean(1.0, -2.0, 0.8);
+  const CPose2D Ap(3.0, 1.5, -1.1);
+
+  CPosePDFGaussian expected(mean, cov);
+  expected += CPosePDFGaussian(Ap, CMatrixDouble33());
+
+  CPosePDFGaussian gauss(mean, cov);
+  gauss += Ap;
+
+  CPosePDFGaussianInf inf(CPosePDFGaussian(mean, cov));
+  inf += Ap;
+  CMatrixDouble33 inf_cov;
+  inf.getCovariance(inf_cov);
+
+  CPosePDFSOG sog;
+  sog.clear();
+  CPosePDFSOG::TGaussianMode mode;
+  mode.mean = mean;
+  mode.cov = cov;
+  sog.push_back(mode);
+  sog += Ap;
+
+  for (int i = 0; i < 3; i++)
+  {
+    for (int j = 0; j < 3; j++)
+    {
+      EXPECT_NEAR(gauss.cov(i, j), expected.cov(i, j), 1e-12) << "(" << i << ", " << j << ")";
+      EXPECT_NEAR(inf_cov(i, j), expected.cov(i, j), 1e-9) << "(" << i << ", " << j << ")";
+      EXPECT_NEAR(sog[0].cov(i, j), expected.cov(i, j), 1e-12) << "(" << i << ", " << j << ")";
+    }
+  }
+  EXPECT_NEAR(gauss.mean.x(), expected.mean.x(), 1e-12);
+  EXPECT_NEAR(gauss.mean.phi(), expected.mean.phi(), 1e-12);
+}
+
 TEST(CPosePDFGaussian, InverseCompositionAndOperators)
 {
   CMatrixDouble33 cov;
