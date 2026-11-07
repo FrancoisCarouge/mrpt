@@ -105,6 +105,37 @@ TEST(CPose3DPDFGaussian, evaluateNormalizedPDF)
 
 // --- CPose3DPDFGaussianInf ---
 
+// Composing the information form with a certain pose must give the inverse of
+// the composed covariance: the information matrix goes through the inverse
+// Jacobian, J^-T * INF * J^-1, not J * INF * J^T.
+TEST(CPose3DPDFGaussianInf, CompositionWithCertainPose)
+{
+  CMatrixDouble66 cov;
+  cov.setIdentity();
+  cov *= 0.01;
+  cov(0, 3) = cov(3, 0) = 0.002;
+  cov(1, 4) = cov(4, 1) = -0.001;
+  const CPose3D mean(1.0, -2.0, 0.5, 0.8, 0.2, -0.3);
+  const CPose3D Ap(3.0, 1.5, -1.0, -1.1, 0.1, 0.4);
+
+  CPose3DPDFGaussian expected(mean, cov);
+  expected += Ap;
+
+  CPose3DPDFGaussianInf inf;
+  inf.copyFrom(CPose3DPDFGaussian(mean, cov));
+  inf += Ap;
+  CMatrixDouble66 inf_cov;
+  inf.getCovariance(inf_cov);
+
+  for (int i = 0; i < 6; i++)
+  {
+    for (int j = 0; j < 6; j++)
+    {
+      EXPECT_NEAR(inf_cov(i, j), expected.cov(i, j), 1e-9) << "(" << i << ", " << j << ")";
+    }
+  }
+}
+
 TEST(CPose3DPDFGaussianInf, bayesianFusion)
 {
   CMatrixDouble66 cov1;
