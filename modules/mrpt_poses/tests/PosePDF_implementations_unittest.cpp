@@ -463,6 +463,36 @@ TEST(CPosePDFGaussian, InverseCompositionWithCrossCovariance)
   }
 }
 
+// A pose PDF composed with a certain point: the point's covariance is
+// J * COV * J^T, J the Jacobian of the composed point with respect to the pose.
+TEST(CPosePDFGaussian, ComposePoint)
+{
+  CMatrixDouble33 cov;
+  cov(0, 0) = 0.04;
+  cov(1, 1) = 0.09;
+  cov(2, 2) = 0.01;
+  cov(0, 1) = cov(1, 0) = 0.02;
+  cov(0, 2) = cov(2, 0) = -0.005;
+  cov(1, 2) = cov(2, 1) = 0.003;
+  const CPosePDFGaussian pdf(CPose2D(1.0, -2.0, 0.8), cov);
+  const mrpt::math::TPoint2D l(3.0, 1.5);
+
+  CPoint2DPDFGaussian g;
+  pdf.composePoint(l, g);
+
+  const double c = std::cos(0.8), s = std::sin(0.8);
+  Eigen::Matrix<double, 2, 3> J;
+  J << 1, 0, -s * l.x - c * l.y, 0, 1, c * l.x - s * l.y;
+  const Eigen::Matrix2d expected = J * cov.asEigen() * J.transpose();
+  for (int i = 0; i < 2; i++)
+  {
+    for (int j = 0; j < 2; j++)
+    {
+      EXPECT_NEAR(g.cov(i, j), expected(i, j), 1e-12) << "(" << i << ", " << j << ")";
+    }
+  }
+}
+
 // Composing with a certain pose is composing with a Gaussian of zero covariance:
 // the covariance goes through the Jacobian of the composition with respect to
 // the first pose, not a rotation by the second pose's heading.
