@@ -127,11 +127,34 @@ inline constexpr fcarouge::sparse::pattern euler_by_quaternion{
     fcarouge::sparse::shape<6, 7>, [](std::size_t row, std::size_t column)
     { return (row < 3 and column == row) or (row >= 3 and column >= 3); }};
 
+/** The derivative of a composed quaternion pose by its first pose: the identity of the translation, and
+ * the derivatives by the quaternion. */
+inline constexpr fcarouge::sparse::pattern quat_by_first{
+    fcarouge::sparse::shape<7, 7>, [](std::size_t row, std::size_t column)
+    { return (row < 3 and column == row) or column >= 3; }};
+/** The derivative of a composed quaternion pose by its second pose: the rotation of the translation,
+ * and the derivative of the quaternion by the quaternion. */
+inline constexpr fcarouge::sparse::pattern quat_by_second{
+    fcarouge::sparse::shape<7, 7>,
+    [](std::size_t row, std::size_t column) { return (row < 3) == (column < 3); }};
+/** The derivative of the inverse of a quaternion pose: the translation by the whole pose, and the
+ * quaternion by the quaternion. */
+inline constexpr fcarouge::sparse::pattern quat_inverse{
+    fcarouge::sparse::shape<7, 7>,
+    [](std::size_t row, std::size_t column) { return row < 3 or column >= 3; }};
+/** The derivative of a quaternion pose by its Euler form: the identity of the translation, and the
+ * derivative of the quaternion by the angles. */
+inline constexpr fcarouge::sparse::pattern quaternion_by_euler{
+    fcarouge::sparse::shape<7, 6>, [](std::size_t row, std::size_t column)
+    { return (row < 3 and column == row) or (row >= 3 and column >= 3); }};
+
 template <auto Pattern, typename RowIndexes, typename ColumnIndexes>
 using Jacobian =
     fcarouge::typed_matrix<fcarouge::sparse_matrix<double, Pattern>, RowIndexes, ColumnIndexes>;
 template <auto Pattern>
 using Pose3Jacobian = Jacobian<Pattern, Pose3, InversePose3>;
+template <auto Pattern>
+using PoseQuatJacobian = Jacobian<Pattern, PoseQuat, InversePoseQuat>;
 
 template <auto Pattern>
 using Pose2Jacobian =
