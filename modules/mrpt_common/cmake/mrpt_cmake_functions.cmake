@@ -495,7 +495,9 @@ function(handle_special_simd_flags lst_files FILE_PATTERN FLAGS_TO_ADD)
     keep_matching_files_from_list(${FILE_PATTERN} _lst)
     if(NOT "${_lst}" STREQUAL "")
       #message(STATUS "Adding special flags ${FLAGS_TO_ADD} to ${_lst}")
-      set_source_files_properties(${_lst} PROPERTIES COMPILE_FLAGS "${FLAGS_TO_ADD}")
+      # Without the precompiled header, built without these target flags: Clang rejects the mismatch
+      set_source_files_properties(${_lst} PROPERTIES COMPILE_FLAGS "${FLAGS_TO_ADD}"
+        SKIP_PRECOMPILE_HEADERS ON)
     endif()
   endif()
 endfunction()
