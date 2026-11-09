@@ -21,7 +21,7 @@
 #include <mrpt/poses/CPose3DPDF.h>
 #include <mrpt/poses/CPosePDFGaussian.h>
 
-#include "typed_pose2_covariance.h"
+#include "typed_pose_covariance.h"
 #include <mrpt/random.h>
 #include <mrpt/serialization/CArchive.h>
 #include <mrpt/serialization/CSchemeArchiveBase.h>

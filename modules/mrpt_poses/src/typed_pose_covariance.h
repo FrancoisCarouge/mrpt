@@ -13,7 +13,7 @@
 */
 #pragma once
 
-// Typed linear algebra of the 2D pose covariances: every element of a covariance and of a Jacobian
+// Typed linear algebra of the pose covariances: every element of a covariance and of a Jacobian
 // has its physical unit, so that a propagation J Σ Jᵀ is checked for units at compile time, and every
 // Jacobian is a sparse matrix of its structural zeros, so that only the products they admit are
 // computed. Private to mrpt_poses: the public interfaces keep their untyped matrices.
@@ -21,6 +21,7 @@
 #include <mrpt/math/CMatrixFixed.h>
 
 #include <array>
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <tuple>
@@ -65,11 +66,21 @@ using Length = Quantity<mp_units::si::metre>;
 using Angle = Quantity<mp_units::si::radian>;
 using InverseLength = Quantity<mp_units::one / mp_units::si::metre>;
 using InverseAngle = Quantity<mp_units::one / mp_units::si::radian>;
+using Ratio = Quantity<mp_units::one>;
 
 /** The elements of a 2D pose, (x, y, φ), and of a 2D point, (x, y). */
 using Pose2 = std::tuple<Length, Length, Angle>;
 using InversePose2 = std::tuple<InverseLength, InverseLength, InverseAngle>;
 using Point2 = std::tuple<Length, Length>;
+
+/** The elements of a 3D pose, (x, y, z, yaw, pitch, roll), and of a 3D pose with its orientation as a
+ * quaternion, (x, y, z, qr, qx, qy, qz). */
+using Pose3 = std::tuple<Length, Length, Length, Angle, Angle, Angle>;
+using InversePose3 =
+    std::tuple<InverseLength, InverseLength, InverseLength, InverseAngle, InverseAngle, InverseAngle>;
+using PoseQuat = std::tuple<Length, Length, Length, Ratio, Ratio, Ratio, Ratio>;
+using InversePoseQuat =
+    std::tuple<InverseLength, InverseLength, InverseLength, Ratio, Ratio, Ratio, Ratio>;
 
 template <std::size_t Rows, std::size_t Columns>
 inline constexpr fcarouge::sparse::pattern dense{fcarouge::sparse::dense<Rows, Columns>};
@@ -79,6 +90,11 @@ using Pose2Covariance =
     fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<3, 3>>, Pose2, Pose2>;
 using Point2Covariance =
     fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<2, 2>>, Point2, Point2>;
+/** The covariance of a 3D pose, m², m·rad, rad², and with a quaternion, m², m, [1]. */
+using Pose3Covariance =
+    fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<6, 6>>, Pose3, Pose3>;
+using PoseQuatCovariance =
+    fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<7, 7>>, PoseQuat, PoseQuat>;
 
 /** The patterns of the Jacobians, the derivatives of a pose or a point by a pose. */
 /** A rotation of the position, the orientation unchanged. */
@@ -94,6 +110,28 @@ inline constexpr fcarouge::sparse::pattern rotation_lever_arm{
 /** The derivative of a composed point by the pose. */
 inline constexpr fcarouge::sparse::pattern point_lever_arm{
     fcarouge::sparse::shape<2, 3>, {{0, 0}, {0, 2}, {1, 1}, {1, 2}}};
+
+/** The derivative of a composed 3D pose by its first pose: the identity of the translation, the
+ * derivative of the translation by the orientation, and of the orientation by the orientation. */
+inline constexpr fcarouge::sparse::pattern pose3_by_first{
+    fcarouge::sparse::shape<6, 6>, [](std::size_t row, std::size_t column)
+    { return (row < 3 and column == row) or column >= 3; }};
+/** The derivative of a composed 3D pose by its second pose: the rotation of the translation, and the
+ * derivative of the orientation by the orientation. */
+inline constexpr fcarouge::sparse::pattern pose3_by_second{
+    fcarouge::sparse::shape<6, 6>,
+    [](std::size_t row, std::size_t column) { return (row < 3) == (column < 3); }};
+/** The derivative of a 3D pose by its quaternion form: the identity of the translation, and the
+ * derivative of the angles by the quaternion. */
+inline constexpr fcarouge::sparse::pattern euler_by_quaternion{
+    fcarouge::sparse::shape<6, 7>, [](std::size_t row, std::size_t column)
+    { return (row < 3 and column == row) or (row >= 3 and column >= 3); }};
+
+template <auto Pattern, typename RowIndexes, typename ColumnIndexes>
+using Jacobian =
+    fcarouge::typed_matrix<fcarouge::sparse_matrix<double, Pattern>, RowIndexes, ColumnIndexes>;
+template <auto Pattern>
+using Pose3Jacobian = Jacobian<Pattern, Pose3, InversePose3>;
 
 template <auto Pattern>
 using Pose2Jacobian =
@@ -123,7 +161,7 @@ template <typename Typed, std::size_t Count>
 }
 
 /** The typed matrix of the stored elements of an untyped one, each read in the unit of its
- * element. The structural zeros are not read. */
+ * element. The structural zeros are not read: a debug build asserts that they are zeros. */
 template <typename Typed, mrpt::math::matrix_dim_t Rows, mrpt::math::matrix_dim_t Columns>
 [[nodiscard]] inline Typed typed(const mrpt::math::CMatrixFixed<double, Rows, Columns>& value)
 {
@@ -134,6 +172,15 @@ template <typename Typed, mrpt::math::matrix_dim_t Rows, mrpt::math::matrix_dim_
     ((values[Index] = value(structure.positions[Index].row, structure.positions[Index].column)),
      ...);
   }(std::make_index_sequence<structure.count>{});
+#ifndef NDEBUG
+  for (std::size_t row = 0; row < Rows; ++row)
+  {
+    for (std::size_t column = 0; column < Columns; ++column)
+    {
+      assert(structure.stores(row, column) or value(row, column) == 0.);
+    }
+  }
+#endif
   return make<Typed>(values);
 }
 
