@@ -192,15 +192,15 @@ function(find_mrpt_package PACKAGE_NAME)
 endfunction()
 
 # -----------------------------------------------------------------------------
-# mrpt_set_target_cxx17(target)
+# mrpt_set_target_cxx26(target)
 #
-# Enabled C++17 for the given target
+# Enables C++26 for the given target
 # -----------------------------------------------------------------------------
-function(mrpt_set_target_cxx17 TARGETNAME)
-  target_compile_features(${TARGETNAME} PUBLIC cxx_std_17)
+function(mrpt_set_target_cxx26 TARGETNAME)
+  target_compile_features(${TARGETNAME} PUBLIC cxx_std_26)
   if (MSVC)
     # Scoped to CXX sources only: a target may also contain plain C sources
-    target_compile_options(${TARGETNAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/std:c++17>)
+    target_compile_options(${TARGETNAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/std:c++latest>)
   endif()
 endfunction()
 
@@ -211,7 +211,7 @@ endfunction()
 # -----------------------------------------------------------------------------
 function(mrpt_set_target_build_options TARGETNAME HEADERS_ONLY_LIBRARY)
   # Build for C++17
-  mrpt_set_target_cxx17(${TARGETNAME})
+  mrpt_set_target_cxx26(${TARGETNAME})
 
   # Warning level:
   if (MSVC)

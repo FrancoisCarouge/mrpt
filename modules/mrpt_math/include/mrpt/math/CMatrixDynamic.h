@@ -115,7 +115,7 @@ class CMatrixDynamic : public MatrixBase<T, CMatrixDynamic<T>>
     const auto nColsToCopy = m_Cols >= old_cols ? old_cols : m_Cols;
     for (Index r = 0; r < nRowsToCopy; r++)
     {
-      if constexpr (std::is_trivial_v<T>)
+      if constexpr (std::is_trivially_default_constructible_v<T> && std::is_trivially_copyable_v<T>)
       {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
@@ -140,7 +140,7 @@ class CMatrixDynamic : public MatrixBase<T, CMatrixDynamic<T>>
     // New rows to zero? (whole rows beyond the old row count)
     if (newElementsToZero && m_Rows > old_rows)
     {
-      if constexpr (std::is_trivial_v<T>)
+      if constexpr (std::is_trivially_default_constructible_v<T> && std::is_trivially_copyable_v<T>)
       {
         ::memset(
             &newData[static_cast<std::size_t>(old_rows * m_Cols)], 0,
@@ -164,7 +164,7 @@ class CMatrixDynamic : public MatrixBase<T, CMatrixDynamic<T>>
     {
       for (Index r = 0; r < nRowsToCopy; r++)
       {
-        if constexpr (std::is_trivial_v<T>)
+        if constexpr (std::is_trivially_default_constructible_v<T> && std::is_trivially_copyable_v<T>)
         {
           ::memset(
               &newData[static_cast<std::size_t>(r * m_Cols + old_cols)], 0,
