@@ -72,6 +72,9 @@ using Ratio = Quantity<mp_units::one>;
 using Pose2 = std::tuple<Length, Length, Angle>;
 using InversePose2 = std::tuple<InverseLength, InverseLength, InverseAngle>;
 using Point2 = std::tuple<Length, Length>;
+using InversePoint2 = std::tuple<InverseLength, InverseLength>;
+using Point3 = std::tuple<Length, Length, Length>;
+using InversePoint3 = std::tuple<InverseLength, InverseLength, InverseLength>;
 
 /** The elements of a 3D pose, (x, y, z, yaw, pitch, roll), and of a 3D pose with its orientation as a
  * quaternion, (x, y, z, qr, qx, qy, qz). */
@@ -90,6 +93,11 @@ using Pose2Covariance =
     fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<3, 3>>, Pose2, Pose2>;
 using Point2Covariance =
     fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<2, 2>>, Point2, Point2>;
+using Point3Covariance =
+    fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<3, 3>>, Point3, Point3>;
+/** The information of a pose, the inverse of its covariance: 1/m², 1/(m·rad), 1/rad². */
+using Pose2Information =
+    fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<3, 3>>, InversePose2, InversePose2>;
 /** The covariance of a 3D pose, m², m·rad, rad², and with a quaternion, m², m, [1]. */
 using Pose3Covariance =
     fcarouge::typed_matrix<fcarouge::sparse_matrix<double, dense<6, 6>>, Pose3, Pose3>;
@@ -155,6 +163,14 @@ template <auto Pattern>
 using Pose3Jacobian = Jacobian<Pattern, Pose3, InversePose3>;
 template <auto Pattern>
 using PoseQuatJacobian = Jacobian<Pattern, PoseQuat, InversePoseQuat>;
+
+/** The transposed inverse of a pose Jacobian, which carries an information matrix to the new frame:
+ * Λ' = J⁻ᵀ Λ J⁻¹. */
+template <auto Pattern>
+using Pose2InformationJacobian = Jacobian<Pattern, InversePose2, Pose2>;
+/** A rotation of a point. */
+using Point3Rotation = Jacobian<dense<3, 3>, Point3, InversePoint3>;
+using Point2Rotation = Jacobian<dense<2, 2>, Point2, InversePoint2>;
 
 template <auto Pattern>
 using Pose2Jacobian =

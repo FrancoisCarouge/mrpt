@@ -21,6 +21,8 @@
 #include <mrpt/poses/CPose3DPDFGaussianInf.h>
 #include <mrpt/poses/CPosePDFGaussian.h>
 #include <mrpt/poses/CPosePDFGaussianInf.h>
+
+#include "typed_pose_covariance.h"
 #include <mrpt/random.h>
 #include <mrpt/serialization/CArchive.h>
 #include <mrpt/serialization/CSchemeArchiveBase.h>
@@ -208,16 +210,15 @@ void CPosePDFGaussianInf::rotateCov(const double ang)
   const double ccos = cos(ang);
   const double ssin = sin(ang);
 
-  alignas(MRPT_MAX_STATIC_ALIGN_BYTES)
-      const double rot_vals[] = {ccos, -ssin, 0., ssin, ccos, 0., 0., 0., 1.};
-
-  const CMatrixFixed<double, 3, 3> rot(rot_vals);
-
   // NEW_COV = H C H^T
   // NEW_COV^(-1) = (H C H^T)^(-1) = (H^T)^(-1) C^(-1) H^(-1)
   // rot: Inverse of a rotation matrix is its trasposed.
-  //      But we need H^t^-1 -> H !! so rot stays unchanged:
-  cov_inv = (rot.asEigen() * cov_inv.asEigen() * rot.asEigen().transpose()).eval();
+  //      But we need H^t^-1 -> H !! so rot stays unchanged, typed as H^t^-1:
+  using namespace typed;
+  const auto rot =
+      make<Pose2InformationJacobian<rotation>>(std::array{ccos, -ssin, ssin, ccos, 1.});
+  cov_inv = untyped(Pose2Information{
+      rot * typed::typed<Pose2Information>(cov_inv) * fcarouge::transposed(rot)});
 }
 
 void CPosePDFGaussianInf::drawSingleSample(CPose2D& outPart) const

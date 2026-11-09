@@ -19,6 +19,8 @@
 #include <mrpt/poses/CPosePDFGaussian.h>
 #include <mrpt/poses/CPosePDFParticles.h>
 #include <mrpt/poses/CPosePDFSOG.h>
+
+#include "typed_pose_covariance.h"
 #include <mrpt/poses/SO_SE_average.h>
 #include <mrpt/random.h>
 #include <mrpt/serialization/CArchive.h>
@@ -220,6 +222,7 @@ void CPosePDFSOG::changeCoordinatesReference(const CPose3D& newReferenceBase_)
   M(2, 0) = 0;
   M(2, 1) = 0;
   M(2, 2) = 1;
+  const auto R = typed::typed<typed::Pose2Jacobian<typed::rotation>>(M);
 
   for (auto& m : m_modes)
   {
@@ -227,9 +230,8 @@ void CPosePDFSOG::changeCoordinatesReference(const CPose3D& newReferenceBase_)
     m.mean.composeFrom(newReferenceBase, m.mean);
 
     // The covariance:
-    // NOTE: the CMatrixDouble33 is NEEDED to create a temporary copy to
-    // allow aliasing
-    m.cov = mrpt::math::multiply_HCHt(M, CMatrixDouble33(m.cov));
+    m.cov = typed::untyped(typed::Pose2Covariance{
+        R * typed::typed<typed::Pose2Covariance>(m.cov) * fcarouge::transposed(R)});
   }
 
   enforceCovSymmetry();
@@ -246,7 +248,12 @@ void CPosePDFSOG::rotateAllCovariances(double ang)
   rot(1, 0) = sin(ang);
   rot(2, 2) = 1;
 
-  for (auto& m : m_modes) m.cov = mrpt::math::multiply_HCHt(rot, CMatrixDouble33(m.cov));
+  const auto R = typed::typed<typed::Pose2Jacobian<typed::rotation>>(rot);
+  for (auto& m : m_modes)
+  {
+    m.cov = typed::untyped(typed::Pose2Covariance{
+        R * typed::typed<typed::Pose2Covariance>(m.cov) * fcarouge::transposed(R)});
+  }
 }
 
 /*---------------------------------------------------------------
