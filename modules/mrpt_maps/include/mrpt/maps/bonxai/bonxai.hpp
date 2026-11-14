@@ -241,7 +241,8 @@ public:
   Grid& operator=(const Grid& other) = delete;
 
   Grid(Grid&& other);
-  Grid& operator=(Grid&& other);
+  // Not assignable: a Mask has constant sizes, so it has no assignment
+  Grid& operator=(Grid&& other) = delete;
 
   ~Grid();
 
@@ -531,16 +532,6 @@ inline Grid<DataT>::Grid(Grid&& other)
   , mask_(std::move(other.mask_))
 {
   std::swap(data_, other.data_);
-}
-
-template <typename DataT>
-inline Grid<DataT>& Grid<DataT>::operator=(Grid&& other)
-{
-  dim_ = other.dim_;
-  size_ = other.size_;
-  mask_ = std::move(other.mask_);
-  std::swap(data_, other.data_);
-  return *this;
 }
 
 template <typename DataT>

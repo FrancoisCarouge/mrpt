@@ -192,15 +192,15 @@ function(find_mrpt_package PACKAGE_NAME)
 endfunction()
 
 # -----------------------------------------------------------------------------
-# mrpt_set_target_cxx17(target)
+# mrpt_set_target_cxx26(target)
 #
-# Enabled C++17 for the given target
+# Enables C++26 for the given target
 # -----------------------------------------------------------------------------
-function(mrpt_set_target_cxx17 TARGETNAME)
-  target_compile_features(${TARGETNAME} PUBLIC cxx_std_17)
+function(mrpt_set_target_cxx26 TARGETNAME)
+  target_compile_features(${TARGETNAME} PUBLIC cxx_std_26)
   if (MSVC)
     # Scoped to CXX sources only: a target may also contain plain C sources
-    target_compile_options(${TARGETNAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/std:c++17>)
+    target_compile_options(${TARGETNAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/std:c++latest>)
   endif()
 endfunction()
 
@@ -211,7 +211,7 @@ endfunction()
 # -----------------------------------------------------------------------------
 function(mrpt_set_target_build_options TARGETNAME HEADERS_ONLY_LIBRARY)
   # Build for C++17
-  mrpt_set_target_cxx17(${TARGETNAME})
+  mrpt_set_target_cxx26(${TARGETNAME})
 
   # Warning level:
   if (MSVC)
@@ -495,7 +495,9 @@ function(handle_special_simd_flags lst_files FILE_PATTERN FLAGS_TO_ADD)
     keep_matching_files_from_list(${FILE_PATTERN} _lst)
     if(NOT "${_lst}" STREQUAL "")
       #message(STATUS "Adding special flags ${FLAGS_TO_ADD} to ${_lst}")
-      set_source_files_properties(${_lst} PROPERTIES COMPILE_FLAGS "${FLAGS_TO_ADD}")
+      # Without the precompiled header, built without these target flags: Clang rejects the mismatch
+      set_source_files_properties(${_lst} PROPERTIES COMPILE_FLAGS "${FLAGS_TO_ADD}"
+        SKIP_PRECOMPILE_HEADERS ON)
     endif()
   endif()
 endfunction()

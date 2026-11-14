@@ -17,6 +17,8 @@
 #include <mrpt/math/transform_gaussian.h>
 #include <mrpt/math/wrap2pi.h>
 #include <mrpt/poses/CPose3DPDFGaussian.h>
+
+#include "typed_pose_covariance.h"
 #include <mrpt/poses/CPose3DQuatPDFGaussian.h>
 #include <mrpt/poses/CPosePDFGaussian.h>
 #include <mrpt/random.h>
@@ -172,26 +174,18 @@ void CPose3DPDFGaussian::copyFrom(const CPose3DQuatPDFGaussian& o)
     // Set the mean:
     this->mean.setFromValues(o.mean.x(), o.mean.y(), o.mean.z(), yaw, pitch, roll);
 
-    // Cov:
-    const CMatrixDouble44 cov_Q = o.cov.blockCopy<4, 4>(3, 3);
-    const CMatrixDouble33 cov_T = o.cov.blockCopy<3, 3>(0, 0);
-    const CMatrixFixed<double, 3, 4> cov_TQ = o.cov.blockCopy<3, 4>(0, 3);
-
+    // Cov: J S Jᵀ, with J the identity of the translation and H = dr_dq_sub:
     // [        S_T       |   S_TQ * H^t    ]
     // [ -----------------+---------------- ]
     // [  (S_TQ * H^t)^t  |  H * S_Q * H^t  ]
-
-    // top-left:
-    this->cov.insertMatrix(0, 0, cov_T);
-
-    // diagonals:
-    const Eigen::Matrix3d cov_TR = cov_TQ.asEigen() * dr_dq_sub.transpose();
-    this->cov.block<3, 3>(0, 3) = cov_TR;
-    this->cov.block<3, 3>(3, 0) = cov_TR.transpose();
-
-    // bottom-right:
-    CMatrixDouble33 cov_r = mrpt::math::multiply_HCHt(dr_dq_sub, cov_Q);
-    this->cov.insertMatrix(3, 3, cov_r);
+    using namespace typed;
+    const auto J = make<Jacobian<euler_by_quaternion, Pose3, InversePoseQuat>>(std::array{
+        1., 1., 1.,                                                                        //
+        dr_dq_sub(0, 0), dr_dq_sub(0, 1), dr_dq_sub(0, 2), dr_dq_sub(0, 3),  //
+        dr_dq_sub(1, 0), dr_dq_sub(1, 1), dr_dq_sub(1, 2), dr_dq_sub(1, 3),  //
+        dr_dq_sub(2, 0), dr_dq_sub(2, 1), dr_dq_sub(2, 2), dr_dq_sub(2, 3)});
+    this->cov = untyped(
+        Pose3Covariance{J * typed::typed<PoseQuatCovariance>(o.cov) * fcarouge::transposed(J)});
   }
   else
   {
@@ -303,8 +297,9 @@ void CPose3DPDFGaussian::changeCoordinatesReference(const CPose3D& newReferenceB
       df_dx, df_du);
 
   // this->cov = H1*this->cov*H1' + H2* 0 *H2';
-  const CMatrixDouble66 covNew = mrpt::math::multiply_HCHt(df_du, OLD_COV);
-  cov = covNew;
+  using namespace typed;
+  const auto du = typed::typed<Pose3Jacobian<pose3_by_second>>(df_du);
+  cov = untyped(Pose3Covariance{du * typed::typed<Pose3Covariance>(OLD_COV) * fcarouge::transposed(du)});
 
   // MEAN:
   this->mean.composeFrom(newReferenceBase, this->mean);
@@ -430,7 +425,9 @@ void CPose3DPDFGaussian::operator+=(const CPose3D& Ap)
       df_dx, df_du);
 
   // this->cov = H1*this->cov*H1' + H2*Ap.cov*H2';
-  cov = mrpt::math::multiply_HCHt(df_dx, OLD_COV);
+  using namespace typed;
+  const auto dx = typed::typed<Pose3Jacobian<pose3_by_first>>(df_dx);
+  cov = untyped(Pose3Covariance{dx * typed::typed<Pose3Covariance>(OLD_COV) * fcarouge::transposed(dx)});
   // df_du: Nothing to do, since COV(Ap) = zeros
 
   // MEAN:

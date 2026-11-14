@@ -21,6 +21,8 @@
 #include <mrpt/poses/CPose3DQuat.h>
 #include <mrpt/poses/CPose3DQuatPDF.h>
 #include <mrpt/poses/CPose3DQuatPDFGaussian.h>
+
+#include "typed_pose_covariance.h"
 #include <mrpt/serialization/CArchive.h>
 #include <mrpt/system/os.h>
 
@@ -155,12 +157,16 @@ void CPose3DQuatPDFGaussian::copyFrom(const CPose3DPDFGaussian& o)
 
     o.mean.getAsQuaternion(mean.quat(), dq_dr_sub);
 
-    // Cov:
-    CMatrixFixed<double, 7, 6> dq_dr;
-    dq_dr(0, 0) = dq_dr(1, 1) = dq_dr(2, 2) = 1;
-    dq_dr.insertMatrix(3, 3, dq_dr_sub);
-    // Now for the covariance:
-    this->cov = mrpt::math::multiply_HCHt(dq_dr, o.cov);
+    // Cov: J S Jᵀ, with J the identity of the translation and dq_dr_sub
+    using namespace typed;
+    const auto dq_dr = make<Jacobian<quaternion_by_euler, PoseQuat, InversePose3>>(std::array{
+        1., 1., 1.,                                          //
+        dq_dr_sub(0, 0), dq_dr_sub(0, 1), dq_dr_sub(0, 2),  //
+        dq_dr_sub(1, 0), dq_dr_sub(1, 1), dq_dr_sub(1, 2),  //
+        dq_dr_sub(2, 0), dq_dr_sub(2, 1), dq_dr_sub(2, 2),  //
+        dq_dr_sub(3, 0), dq_dr_sub(3, 1), dq_dr_sub(3, 2)});
+    this->cov = untyped(PoseQuatCovariance{
+        dq_dr * typed::typed<Pose3Covariance>(o.cov) * fcarouge::transposed(dq_dr)});
   }
   else
   {
@@ -235,7 +241,10 @@ void CPose3DQuatPDFGaussian::changeCoordinatesReference(const CPose3DQuat& newRe
 
   // this->cov = H1*this->cov*H1' + H2*Ap.cov*H2';
   // df_dx: not used, since its COV are all zeros...
-  cov = mrpt::math::multiply_HCHt(df_du, OLD_COV);
+  using namespace typed;
+  const auto du = typed::typed<PoseQuatJacobian<quat_by_second>>(df_du);
+  cov = untyped(
+      PoseQuatCovariance{du * typed::typed<PoseQuatCovariance>(OLD_COV) * fcarouge::transposed(du)});
 
   MRPT_END
 }
@@ -317,10 +326,12 @@ void CPose3DQuatPDFGaussian::inverse(CPose3DQuatPDF& o) const
   double lx, ly, lz;
   this->mean.inverseComposePoint(0, 0, 0, lx, ly, lz, nullptr, nullptr);
 
-  CMatrixFixed<double, 7, 7> jacob = this->inverseJacobian();
+  using namespace typed;
+  const auto jacob = typed::typed<PoseQuatJacobian<quat_inverse>>(this->inverseJacobian());
 
   // C(0:2,0:2): H C H^t
-  out.cov = mrpt::math::multiply_HCHt(jacob, this->cov);
+  out.cov = untyped(PoseQuatCovariance{
+      jacob * typed::typed<PoseQuatCovariance>(this->cov) * fcarouge::transposed(jacob)});
 
   // Mean:
   out.mean.x(lx);
@@ -360,13 +371,18 @@ mrpt::poses::CPose3DQuatPDFGaussian CPose3DQuatPDFGaussian::inverseCompositionCr
       this->mean, displacement.mean, Hc1i, Hc2i);
   Hc1i.asEigen().block<4, 4>(3, 3) *= norm_jacob_pose_from.asEigen();
 
-  mrpt::math::CMatrixDouble77 cov_correlation(Hc1i.asEigen() * this->cov.asEigen());
-  mrpt::math::CMatrixDouble77 cov_correlation_jac(
-      Hc2.asEigen() * cov_correlation.asEigen() * jacob_inv.asEigen().transpose() *
-      Hc1.asEigen().transpose());
+  using namespace typed;
+  const auto tHc1 = typed::typed<PoseQuatJacobian<quat_by_first>>(Hc1);
+  const auto tHc2 = typed::typed<PoseQuatJacobian<quat_by_second>>(Hc2);
+  const auto tHc1i = typed::typed<PoseQuatJacobian<quat_by_first>>(Hc1i);
+  const auto tjacob_inv = typed::typed<PoseQuatJacobian<quat_inverse>>(jacob_inv);
+  const PoseQuatCovariance cov_correlation{tHc1i * typed::typed<PoseQuatCovariance>(this->cov)};
+  const PoseQuatCovariance cov_correlation_jac{
+      tHc2 * cov_correlation * fcarouge::transposed(tjacob_inv) * fcarouge::transposed(tHc1)};
 
-  displacement.cov.asEigen() += cov_correlation_jac.asEigen();
-  displacement.cov.asEigen() += cov_correlation_jac.asEigen().transpose();
+  displacement.cov = untyped(PoseQuatCovariance{
+      typed::typed<PoseQuatCovariance>(displacement.cov) + cov_correlation_jac +
+      fcarouge::transposed(cov_correlation_jac)});
 
   for (size_t i = 0; i < displacement.cov.rows(); i++) ASSERT_(displacement.cov(i, i) >= 0.0);
 
@@ -390,7 +406,10 @@ void CPose3DQuatPDFGaussian::operator+=(const CPose3DQuat& Ap)
   );
 
   // this->cov = H1*this->cov*H1' + H2*Ap.cov*H2';
-  cov = mrpt::math::multiply_HCHt(df_dx, OLD_COV);
+  using namespace typed;
+  const auto dx = typed::typed<PoseQuatJacobian<quat_by_first>>(df_dx);
+  cov = untyped(
+      PoseQuatCovariance{dx * typed::typed<PoseQuatCovariance>(OLD_COV) * fcarouge::transposed(dx)});
   // df_du: Nothing to do, since COV(Ap) = zeros
 }
 
@@ -411,8 +430,12 @@ void CPose3DQuatPDFGaussian::operator+=(const CPose3DQuatPDFGaussian& Ap)
   );
 
   // this->cov = H1*this->cov*H1' + H2*Ap.cov*H2';
-  cov = mrpt::math::multiply_HCHt(df_dx, OLD_COV);
-  cov += mrpt::math::multiply_HCHt(df_du, Ap.cov);
+  using namespace typed;
+  const auto dx = typed::typed<PoseQuatJacobian<quat_by_first>>(df_dx);
+  const auto du = typed::typed<PoseQuatJacobian<quat_by_second>>(df_du);
+  cov = untyped(PoseQuatCovariance{
+      dx * typed::typed<PoseQuatCovariance>(OLD_COV) * fcarouge::transposed(dx) +
+      du * typed::typed<PoseQuatCovariance>(Ap.cov) * fcarouge::transposed(du)});
 }
 
 /*---------------------------------------------------------------

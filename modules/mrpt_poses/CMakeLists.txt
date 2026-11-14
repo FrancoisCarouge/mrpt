@@ -15,6 +15,9 @@ project(mrpt_poses LANGUAGES C CXX)
 find_package(mrpt_common REQUIRED)
 find_package(mrpt_bayes REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(mp-units REQUIRED)
+find_package(fcarouge-typed-linear-algebra REQUIRED)
+find_package(fcarouge-sparse-linear-algebra REQUIRED)
 
 # define lib:
 set(LIB_SOURCES
@@ -164,6 +167,9 @@ mrpt_add_library(
     mrpt::mrpt_bayes
   PRIVATE_LINK_LIBRARIES
     Eigen3::Eigen
+    mp-units::mp-units
+    fcarouge-typed-linear-algebra::tlinalg
+    fcarouge-sparse-linear-algebra::slinalg
   CMAKE_DEPENDENCIES
     mrpt_bayes
   UNITTEST_LINK_LIBRARIES

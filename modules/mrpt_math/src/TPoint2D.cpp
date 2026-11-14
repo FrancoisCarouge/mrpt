@@ -22,8 +22,8 @@
 
 namespace mrpt::math
 {
-static_assert(std::is_trivial_v<TPoint2D_data<float>>);
-static_assert(std::is_trivial_v<TPoint2D_data<double>>);
+static_assert(std::is_trivially_default_constructible_v<TPoint2D_data<float>> && std::is_trivially_copyable_v<TPoint2D_data<float>>);
+static_assert(std::is_trivially_default_constructible_v<TPoint2D_data<double>> && std::is_trivially_copyable_v<TPoint2D_data<double>>);
 static_assert(std::is_trivially_copyable_v<TPoint2D>);
 static_assert(std::is_trivially_copyable_v<TPoint2Df>);
 

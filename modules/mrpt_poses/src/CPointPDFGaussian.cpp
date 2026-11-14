@@ -15,6 +15,8 @@
 #include <mrpt/math/matrix_serialization.h>
 #include <mrpt/math/ops_matrices.h>
 #include <mrpt/poses/CPointPDFGaussian.h>
+
+#include "typed_pose_covariance.h"
 #include <mrpt/poses/CPose3D.h>
 #include <mrpt/random/RandomGenerators.h>
 #include <mrpt/serialization/CArchive.h>
@@ -148,7 +150,9 @@ void CPointPDFGaussian::changeCoordinatesReference(const CPose3D& newReferenceBa
   mean = newReferenceBase + mean;
 
   // The covariance:
-  cov = (M.asEigen() * cov.asEigen() * M.transpose()).eval();
+  using namespace typed;
+  const auto R = typed::typed<Point3Rotation>(M);
+  cov = untyped(Point3Covariance{R * typed::typed<Point3Covariance>(cov) * fcarouge::transposed(R)});
 }
 
 /*---------------------------------------------------------------

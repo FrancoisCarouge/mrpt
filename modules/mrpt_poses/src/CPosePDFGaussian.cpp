@@ -20,6 +20,8 @@
 #include <mrpt/poses/CPose3D.h>
 #include <mrpt/poses/CPose3DPDF.h>
 #include <mrpt/poses/CPosePDFGaussian.h>
+
+#include "typed_pose_covariance.h"
 #include <mrpt/random.h>
 #include <mrpt/serialization/CArchive.h>
 #include <mrpt/serialization/CSchemeArchiveBase.h>
@@ -200,11 +202,9 @@ void CPosePDFGaussian::rotateCov(const double ang)
   const double ccos = cos(ang);
   const double ssin = sin(ang);
 
-  alignas(MRPT_MAX_STATIC_ALIGN_BYTES)
-      const double rot_vals[] = {ccos, -ssin, 0., ssin, ccos, 0., 0., 0., 1.};
-
-  const CMatrixFixed<double, 3, 3> rot(rot_vals);
-  cov = (rot.asEigen() * cov.asEigen() * rot.asEigen().transpose()).eval();
+  using namespace typed;
+  const auto rot = make<Pose2Jacobian<rotation>>(std::array{ccos, -ssin, ssin, ccos, 1.});
+  cov = untyped(Pose2Covariance{rot * typed::typed<Pose2Covariance>(cov) * fcarouge::transposed(rot)});
 }
 
 /*---------------------------------------------------------------
@@ -308,13 +308,13 @@ void CPosePDFGaussian::inverse(CPosePDF& o) const
   const double ssin = ::sin(mean.phi());
 
   // jacobian:
-  alignas(MRPT_MAX_STATIC_ALIGN_BYTES)
-      const double H_values[] = {-ccos, -ssin, mean.x() * ssin - mean.y() * ccos,
-                                 ssin,  -ccos, mean.x() * ccos + mean.y() * ssin,
-                                 0,     0,     -1};
-  const CMatrixFixed<double, 3, 3> H(H_values);
+  using namespace typed;
+  const auto H = make<Pose2Jacobian<rotation_lever_arm>>(std::array{
+      -ccos, -ssin, mean.x() * ssin - mean.y() * ccos,  //
+      ssin, -ccos, mean.x() * ccos + mean.y() * ssin,   //
+      -1.});
 
-  out->cov.asEigen().noalias() = (H.asEigen() * cov.asEigen() * H.transpose()).eval();
+  out->cov = untyped(Pose2Covariance{H * typed::typed<Pose2Covariance>(cov) * fcarouge::transposed(H)});
 }
 
 /*---------------------------------------------------------------
@@ -326,7 +326,9 @@ void CPosePDFGaussian::operator+=(const CPose2D& Ap)
   CMatrixDouble33 df_du(UNINITIALIZED_MATRIX);
   CPosePDF::jacobiansPoseComposition(mean, Ap, df_dx, df_du, true, false);
 
-  cov = mrpt::math::multiply_HCHt(df_dx, CMatrixDouble33(cov));
+  using namespace typed;
+  const auto dx = typed::typed<Pose2Jacobian<lever_arm>>(df_dx);
+  cov = untyped(Pose2Covariance{dx * typed::typed<Pose2Covariance>(cov) * fcarouge::transposed(dx)});
   mean = mean + Ap;
 }
 
@@ -438,32 +440,24 @@ void CPosePDFGaussian::inverseComposition(const CPosePDFGaussian& xv, const CPos
   double cpi = cos(xi.mean.phi());
   double spi = sin(xi.mean.phi());
 
+  using namespace typed;
   // jacob: dh_xv
-  CMatrixDouble33 dh_xv;
-
-  dh_xv(0, 0) = cpi;
-  dh_xv(0, 1) = spi;
-  dh_xv(1, 0) = -spi;
-  dh_xv(1, 1) = cpi;
-  dh_xv(2, 2) = 1;
+  const auto dh_xv = make<Pose2Jacobian<rotation>>(std::array{cpi, spi, -spi, cpi, 1.});
 
   // jacob: dh_xi
-  CMatrixDouble33 dh_xi;
-
   double xv_xi = xv.mean.x() - xi.mean.x();
   double yv_yi = xv.mean.y() - xi.mean.y();
 
-  dh_xi(0, 0) = -cpi;
-  dh_xi(0, 1) = -spi;
-  dh_xi(0, 2) = -xv_xi * spi + yv_yi * cpi;
-  dh_xi(1, 0) = spi;
-  dh_xi(1, 1) = -cpi;
-  dh_xi(1, 2) = -xv_xi * cpi - yv_yi * spi;
-  dh_xi(2, 2) = -1;
+  const auto dh_xi = make<Pose2Jacobian<rotation_lever_arm>>(std::array{
+      -cpi, -spi, -xv_xi * spi + yv_yi * cpi,  //
+      spi, -cpi, -xv_xi * cpi - yv_yi * spi,   //
+      -1.});
 
   // Build the cov:
   //  Y = dh_xv * XV * dh_xv^T  + dh_xi * XI * dh_xi^T
-  this->cov = mrpt::math::multiply_HCHt(dh_xv, xv.cov) + mrpt::math::multiply_HCHt(dh_xi, xi.cov);
+  this->cov = untyped(Pose2Covariance{
+      dh_xv * typed::typed<Pose2Covariance>(xv.cov) * fcarouge::transposed(dh_xv) +
+      dh_xi * typed::typed<Pose2Covariance>(xi.cov) * fcarouge::transposed(dh_xi)});
 
   // Mean:
   mean = xv.mean - xi.mean;
@@ -481,37 +475,28 @@ void CPosePDFGaussian::inverseComposition(
   double cp0 = cos(x0.mean.phi());
   double sp0 = sin(x0.mean.phi());
 
+  using namespace typed;
   // jacob: dh_x1
-  CMatrixDouble33 dh_x1;
-
-  dh_x1(0, 0) = cp0;
-  dh_x1(0, 1) = sp0;
-  dh_x1(1, 0) = -sp0;
-  dh_x1(1, 1) = cp0;
-  dh_x1(2, 2) = 1;
+  const auto dh_x1 = make<Pose2Jacobian<rotation>>(std::array{cp0, sp0, -sp0, cp0, 1.});
 
   // jacob: dh_x0
-  CMatrixDouble33 dh_x0;
-
   double xv_xi = x1.mean.x() - x0.mean.x();
   double yv_yi = x1.mean.y() - x0.mean.y();
 
-  dh_x0(0, 0) = -cp0;
-  dh_x0(0, 1) = -sp0;
-  dh_x0(0, 2) = -xv_xi * sp0 + yv_yi * cp0;
-  dh_x0(1, 0) = sp0;
-  dh_x0(1, 1) = -cp0;
-  dh_x0(1, 2) = -xv_xi * cp0 - yv_yi * sp0;
-  dh_x0(2, 2) = -1;
+  const auto dh_x0 = make<Pose2Jacobian<rotation_lever_arm>>(std::array{
+      -cp0, -sp0, -xv_xi * sp0 + yv_yi * cp0,  //
+      sp0, -cp0, -xv_xi * cp0 - yv_yi * sp0,   //
+      -1.});
 
   // Build the cov:
   //  Y = dh_x1 * X1 * dh_x1^T  + dh_x0 * X0 * dh_x0^T +  A + At
   //     being A = dh_dx0 * COV01 * dh_dx1^t
-  this->cov = mrpt::math::multiply_HCHt(dh_x0, x0.cov) + mrpt::math::multiply_HCHt(dh_x1, x1.cov);
-
-  const auto A = CMatrixDouble33(dh_x0.asEigen() * COV_01.asEigen() * dh_x1.asEigen().transpose());
-
-  this->cov.asEigen() += (A.asEigen() + A.asEigen().transpose()).eval();
+  const Pose2Covariance A{
+      dh_x0 * typed::typed<Pose2Covariance>(COV_01) * fcarouge::transposed(dh_x1)};
+  this->cov = untyped(Pose2Covariance{
+      dh_x0 * typed::typed<Pose2Covariance>(x0.cov) * fcarouge::transposed(dh_x0) +
+      dh_x1 * typed::typed<Pose2Covariance>(x1.cov) * fcarouge::transposed(dh_x1) +
+      (A + fcarouge::transposed(A))});
 
   // mean
   mean = x1.mean - x0.mean;
@@ -531,7 +516,12 @@ void CPosePDFGaussian::operator+=(const CPosePDFGaussian& Ap)
       Ap.mean,     // u
       df_dx, df_du);
 
-  this->cov = mrpt::math::multiply_HCHt(df_dx, OLD_COV) + mrpt::math::multiply_HCHt(df_du, Ap.cov);
+  using namespace typed;
+  const auto dx = typed::typed<Pose2Jacobian<lever_arm>>(df_dx);
+  const auto du = typed::typed<Pose2Jacobian<rotation>>(df_du);
+  this->cov = untyped(Pose2Covariance{
+      dx * typed::typed<Pose2Covariance>(OLD_COV) * fcarouge::transposed(dx) +
+      du * typed::typed<Pose2Covariance>(Ap.cov) * fcarouge::transposed(du)});
 
   // MEAN:
   this->mean = this->mean + Ap.mean;
@@ -557,8 +547,11 @@ void CPosePDFGaussian::composePoint(const mrpt::math::TPoint2D& l, CPoint2DPDFGa
       false  // Eval df_du (not needed)
   );
 
-  const auto dp_dx = CMatrixFixed<double, 2, 3>(df_dx.block<2, 3>(0, 0));
-  g.cov = dp_dx * this->cov * dp_dx.transpose();
+  using namespace typed;
+  const auto dp_dx =
+      typed::typed<Point2Jacobian<point_lever_arm>>(CMatrixFixed<double, 2, 3>(df_dx.block<2, 3>(0, 0)));
+  g.cov = untyped(Point2Covariance{
+      dp_dx * typed::typed<Pose2Covariance>(this->cov) * fcarouge::transposed(dp_dx)});
 }
 
 bool mrpt::poses::operator==(const CPosePDFGaussian& p1, const CPosePDFGaussian& p2)

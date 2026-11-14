@@ -20,6 +20,7 @@
 #include <mrpt/system/string_utils.h>
 
 #include <algorithm>
+#include <format>
 #include <fstream>
 #include <iostream>
 
@@ -250,7 +251,7 @@ void CTimeLogger::saveToCSVFile(const std::string& csv_file) const
       for (const double v : wh)
       {
         s += ", ";
-        s += std::to_string(v);
+        s += std::format("{:f}", v);
       }
     }
     s += "\n";

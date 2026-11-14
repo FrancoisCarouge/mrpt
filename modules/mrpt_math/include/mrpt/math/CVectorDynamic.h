@@ -94,7 +94,7 @@ class CVectorDynamic : public MatrixVectorBase<T, CVectorDynamic<T>>
     m_data.resize(static_cast<std::size_t>(new_len));
     if (newElementsToZero && new_len > old_len_s)
     {
-      if constexpr (std::is_trivial_v<T>)
+      if constexpr (std::is_trivially_default_constructible_v<T> && std::is_trivially_copyable_v<T>)
       {
         ::memset(&m_data[old_len], 0, sizeof(T) * static_cast<std::size_t>(new_len - old_len_s));
       }

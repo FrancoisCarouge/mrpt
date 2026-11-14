@@ -15,6 +15,8 @@
 #include <mrpt/math/CMatrixD.h>
 #include <mrpt/math/matrix_serialization.h>
 #include <mrpt/poses/CPoint2DPDFGaussian.h>
+
+#include "typed_pose_covariance.h"
 #include <mrpt/poses/CPoint3D.h>
 #include <mrpt/poses/CPose3D.h>
 #include <mrpt/random/RandomGenerators.h>
@@ -135,7 +137,9 @@ void CPoint2DPDFGaussian::changeCoordinatesReference(const CPose3D& newReference
   mean = CPoint2D(newReferenceBase + mean);
 
   // The covariance:
-  cov = (M.asEigen() * cov.asEigen() * M.transpose()).eval();
+  using namespace typed;
+  const auto R = typed::typed<Point2Rotation>(M);
+  cov = untyped(Point2Covariance{R * typed::typed<Point2Covariance>(cov) * fcarouge::transposed(R)});
 }
 
 /*---------------------------------------------------------------
